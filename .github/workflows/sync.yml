@@ -1,0 +1,31 @@
+name: Sync UptimeRobot IPv4
+on:
+  schedule:
+    - cron: '17 7 * * *'   # daily ~2-3 AM Eastern
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download from UptimeRobot
+        run: curl -fsS --retry 3 --max-time 60 https://cdn.uptimerobot.com/api/IPv4.txt -o /tmp/raw.txt
+      - name: Validate and split
+        run: bash scripts/split.sh /tmp/raw.txt
+      - name: Commit if changed (or monthly keepalive)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add part1.txt part2.txt
+          age=$(( $(date +%s) - $(git log -1 --format=%ct) ))
+          if ! git diff --cached --quiet; then
+            git commit -m "UptimeRobot list changed"
+          elif [ "$age" -gt 2592000 ]; then
+            date -u +%FT%TZ > last_checked.txt; git add last_checked.txt
+            git commit -m "Keepalive (list unchanged)"
+          else
+            echo "No change"; exit 0
+          fi
+          git push
